@@ -15,7 +15,7 @@ from PyQt5.QtCore import (
 )
 
 from config import *
-
+import winsound
 from data_logger import DataLogger
 from plc_controller import PLCController
 from fault_manager import FaultManager
@@ -28,7 +28,16 @@ from hmi_panel import HMIPanel
 from traffic_state_manager import TrafficStateManager
 from splash_screen import SplashScreen
 
+
 class TrafficWindow(QWidget):
+    # ALARM SOUND
+
+    def play_alarm_sound(self):
+
+       winsound.Beep(
+          1000,
+          300
+    )
 
     def __init__(self):
 
@@ -92,6 +101,8 @@ class TrafficWindow(QWidget):
         self.system_logs = []
 
         self.emergency_vehicle = False
+
+        self.emergency_timer = 0
 
         # BUTTON CONNECTIONS
 
@@ -214,7 +225,17 @@ class TrafficWindow(QWidget):
 
         self.emergency_vehicle = True
 
+        self.controller_mode = "EMERGENCY"
+
+        # TIMER
+
+        self.emergency_timer = 300
+
+        # ADD AMBULANCE
+
         self.vehicle_manager.add_emergency_vehicle()
+
+        # SHIFT DIVIDER
 
         self.target_divider_position = (
             MAX_DIVIDER_SHIFT
@@ -230,14 +251,16 @@ class TrafficWindow(QWidget):
 
         self.fault_manager.activate_motor_fault()
 
+        self.play_alarm_sound()
+
         self.add_log(
             "MOTOR FAULT"
-        )
+    ) 
 
     def activate_sensor_fault(self):
 
         self.fault_manager.activate_sensor_fault()
-
+        self.play_alarm_sound()
         self.add_log(
             "SENSOR FAULT"
         )
@@ -245,7 +268,7 @@ class TrafficWindow(QWidget):
     def activate_comm_fault(self):
 
         self.fault_manager.activate_communication_fault()
-
+        self.play_alarm_sound()
         self.add_log(
             "COMM FAULT"
         )
@@ -377,7 +400,25 @@ class TrafficWindow(QWidget):
                 "Ambulance Detected"
             )
 
-        # MOTOR
+            # TIMER
+
+            self.emergency_timer -= 1
+
+            # RETURN TO AUTO
+
+            if self.emergency_timer <= 0:
+
+                self.emergency_vehicle = False
+
+                self.controller_mode = "AUTO"
+
+                self.target_divider_position = 0
+
+                self.add_log(
+                    "AUTO MODE RESTORED"
+                )
+
+        # MOTOR MOVEMENT
 
         if not self.fault_manager.motor_fault:
 
@@ -512,11 +553,15 @@ class TrafficWindow(QWidget):
     # DRAW
 
     def paintEvent(self, event):
+
         painter = QPainter(self)
+
         width = self.width()
+
         height = self.height()
 
         # ROAD
+
         self.road_drawer.draw_road(
             painter,
             width,
@@ -524,13 +569,16 @@ class TrafficWindow(QWidget):
         )
 
         # TRAFFIC LIGHT
+
         self.road_drawer.draw_traffic_light(
             painter,
             self.signal_status
         )
 
         # DIVIDER POSITION
+
         road_width = width - ROAD_START
+
         divider_x = (
             ROAD_START
             + road_width // 2
@@ -538,6 +586,7 @@ class TrafficWindow(QWidget):
         )
 
         # DIVIDER
+
         self.road_drawer.draw_divider(
             painter,
             divider_x,
@@ -545,6 +594,7 @@ class TrafficWindow(QWidget):
         )
 
         # VEHICLES
+
         self.road_drawer.draw_vehicles(
             painter,
             self.vehicle_manager.left_cars,
@@ -554,14 +604,21 @@ class TrafficWindow(QWidget):
         )
 
         # ANALYTICS
+
         self.analytics.draw_analytics(
             painter,
             width
         )
 
+
 # START
+
 app = QApplication(sys.argv)
+
 window = TrafficWindow()
+
 splash = SplashScreen(window)
+
 splash.show()
+
 sys.exit(app.exec_())
